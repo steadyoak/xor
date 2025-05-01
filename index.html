@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>QR XOR Decoder</title>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.min.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    input, button { margin: 10px 0; display: block; }
+    textarea { width: 100%; height: 80px; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h2>二维码异或还原 UTF-8</h2>
+
+  <label>上传第一个二维码（Base64 A）</label>
+  <input type="file" accept="image/*" onchange="loadQR(event, 1)" />
+
+  <label>上传第二个二维码（Base64 B）</label>
+  <input type="file" accept="image/*" onchange="loadQR(event, 2)" />
+
+  <label>还原出的 UTF-8 字符串：</label>
+  <textarea id="utf8Output" readonly></textarea>
+
+  <script>
+    let base64A = '', base64B = '';
+
+    function base64ToBinary(b64) {
+      return atob(b64).split('').map(c => c.charCodeAt(0).toString(2).padStart(8, '0')).join('');
+    }
+
+    function binaryToBase64(bin) {
+      const bytes = bin.match(/.{1,8}/g).map(b => parseInt(b, 2));
+      return btoa(String.fromCharCode(...bytes));
+    }
+
+    function tryXorAndShow() {
+      if (!base64A || !base64B) return;
+
+      if (base64A.length !== base64B.length) {
+        document.getElementById('utf8Output').value = '两个二维码内容长度不一致，无法异或';
+        return;
+      }
+
+      const binA = base64ToBinary(base64A);
+      const binB = base64ToBinary(base64B);
+      const xorBin = binA.split('').map((bit, i) => bit ^ binB[i]).join('');
+      const resultBase64 = binaryToBase64(xorBin);
+
+      try {
+        const utf8 = decodeURIComponent(escape(atob(resultBase64))).replace(/\x00+$/, '');
+        document.getElementById('utf8Output').value = utf8;
+      } catch (e) {
+        document.getElementById('utf8Output').value = '解码失败：' + e.message;
+      }
+    }
+
+    function loadQR(event, index) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, canvas.width, canvas.height);
+          if (code) {
+            if (index === 1) base64A = code.data;
+            if (index === 2) base64B = code.data;
+            tryXorAndShow();
+          } else {
+            document.getElementById('utf8Output').value = `二维码 ${index} 无法识别`;
+          }
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+  </script>
+</body>
+</html>
